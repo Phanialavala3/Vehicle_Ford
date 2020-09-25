@@ -4,7 +4,6 @@ import com.ford.vehicleInfo.Repository.VehicleRepository;
 import com.ford.vehicleInfo.entity.Vehicle;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,7 +27,6 @@ public class VehicleControllerTest {
     MockMvc mockMvc;
 
     @Autowired
-    @Mock
     private VehicleRepository vehicleRepository;
 
     @Test
@@ -219,7 +217,7 @@ public class VehicleControllerTest {
                 .andExpect(jsonPath("$.message").value("101,102,103,104,105 submitted to database successfully"));
 
         assertTrue(vehicleRepository.findById("101").isPresent());
-        Vehicle vehicle101=vehicleRepository.findById("101").get();
+        Vehicle vehicle101 = vehicleRepository.findById("101").get();
         assertEquals(8, vehicle101.getVehicleFeatures().size());
     }
 

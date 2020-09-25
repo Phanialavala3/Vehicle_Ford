@@ -1,23 +1,17 @@
 package com.ford.vehicleInfo.service;
 
 
-import com.ford.vehicleInfo.Repository.VehicleFeatureRepository;
-import com.ford.vehicleInfo.Repository.VehiclePriceRepository;
 import com.ford.vehicleInfo.Repository.VehicleRepository;
 import com.ford.vehicleInfo.dto.*;
 import com.ford.vehicleInfo.entity.Vehicle;
 import com.ford.vehicleInfo.entity.VehicleFeature;
 import com.ford.vehicleInfo.entity.VehiclePrice;
-import com.ford.vehicleInfo.exceptions.NoVehicleFeaturesFoundException;
 import com.ford.vehicleInfo.exceptions.NoVehiclesFoundException;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
 import javax.transaction.Transactional;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -26,19 +20,15 @@ import java.util.stream.Stream;
 public class VehicleService {
     private final VehicleRepository vehicleRepository;
     private final ModelMapper modelMapper;
-    private final VehicleFeatureRepository vehicleFeatureRepository;
-    private final VehiclePriceRepository vehiclePriceRepository;
 
-    public VehicleService(VehicleRepository vehicleRepository, ModelMapper modelMapper, VehicleFeatureRepository vehicleFeatureRepository, VehiclePriceRepository vehiclePriceRepository) {
-        this.vehicleRepository=vehicleRepository;
-        this.modelMapper=modelMapper;
-        this.vehicleFeatureRepository=vehicleFeatureRepository;
-        this.vehiclePriceRepository=vehiclePriceRepository;
+    public VehicleService(VehicleRepository vehicleRepository, ModelMapper modelMapper) {
+        this.vehicleRepository = vehicleRepository;
+        this.modelMapper = modelMapper;
     }
 
     @Transactional
     public List<Vehicle> submitVehicle(SubmitVehicleRequestDTO submitVehicleRequestDTO) {
-        List<Vehicle> vehicles=buildVehicles(submitVehicleRequestDTO.getVehicles());
+        List<Vehicle> vehicles = buildVehicles(submitVehicleRequestDTO.getVehicles());
         return vehicleRepository.saveAll(vehicles);
     }
 
@@ -55,35 +45,29 @@ public class VehicleService {
     }
 
     public VehiclesResponseDTO getVehiclesByPriceRange(Double fromValue, Double toValue) {
-        List<VehiclePrice> vehiclePrices=vehiclePriceRepository.findAllByFinalPriceBetween(fromValue, toValue);
-        if (vehiclePrices == null || vehiclePrices.size() == 0) {
-            throw new NoVehiclesFoundException("No Vehicle Found between Price range");
-        }
         return VehiclesResponseDTO.builder()
-                .vehicles(buildVehiclesDTO(vehicleRepository.findAllByVehiclePrice(vehiclePrices)))
+                .vehicles(buildVehiclesDTO(vehicleRepository.findByVehiclePrice_FinalPriceBetween(fromValue, toValue)))
                 .build();
     }
 
     public VehiclesResponseDTO getVehiclesByMatchingExteriorInterior(String exterior, String interior) {
-        List<VehicleFeature> exteriorMatchingFeatures=vehicleFeatureRepository.findByFeatureTypeAndFeatureIgnoreCase(FeatureType.EXTERIOR, exterior);
-        List<VehicleFeature> interiorMatchingFeatures=vehicleFeatureRepository.findByFeatureTypeAndFeatureIgnoreCase(FeatureType.INTERIOR, interior);
-        List<VehicleFeature> matchingFeatures=Stream.of(exteriorMatchingFeatures, interiorMatchingFeatures)
-                .flatMap(vehicleFeatures -> vehicleFeatures.stream())
+        List<Vehicle> exteriorMatchingVehicles = vehicleRepository.findByVehicleFeatures_FeatureTypeAndVehicleFeatures_Feature(FeatureType.EXTERIOR, exterior);
+        List<Vehicle> interiorMatchingVehicles = vehicleRepository.findByVehicleFeatures_FeatureTypeAndVehicleFeatures_Feature(FeatureType.INTERIOR, interior);
+        List<Vehicle> matchingVehicles = Stream.of(exteriorMatchingVehicles, interiorMatchingVehicles)
+                .flatMap(x -> x.stream())
                 .collect(Collectors.toList());
-        if (matchingFeatures == null || matchingFeatures.size() == 0) {
-            throw new NoVehicleFeaturesFoundException("No Vehicle Features Found Matching Criteria");
-        }
+        Set<Vehicle> uniqueResults = new HashSet<>(matchingVehicles);
 
         return VehiclesResponseDTO.builder()
-                .vehicles(buildVehiclesDTO(vehicleRepository.findAllByVehicleFeatures_FeatureType_AndVehicleFeatures_FeatureContaining(matchingFeatures)))
+                .vehicles(buildVehiclesDTO(new ArrayList<>(uniqueResults)))
                 .build();
     }
 
     private VehiclesDTO buildVehiclesDTO(List<Vehicle> vehicles) {
-        List<VehicleDTO> vehicleDTOS=new ArrayList<>();
+        List<VehicleDTO> vehicleDTOS = new ArrayList<>();
         if (vehicles != null && vehicles.size() > 0) {
             vehicles.forEach(vehicle -> {
-                VehicleDetailsDTO vehicleDetailsDTO=modelMapper.map(vehicle, VehicleDetailsDTO.class);
+                VehicleDetailsDTO vehicleDetailsDTO = modelMapper.map(vehicle, VehicleDetailsDTO.class);
                 vehicleDetailsDTO.setVehicleFeature(buildVehicleFeatureDTO(vehicle.getVehicleFeatures()));
                 vehicleDetailsDTO.setVehiclePrice(buildVehiclePriceDTO(vehicle.getVehiclePrice()));
                 vehicleDTOS.add(VehicleDTO.builder()
@@ -96,11 +80,11 @@ public class VehicleService {
     }
 
     private List<Vehicle> buildVehicles(VehiclesDTO vehiclesDTO) {
-        List<Vehicle> vehicles=new ArrayList<>();
+        List<Vehicle> vehicles = new ArrayList<>();
         if (vehiclesDTO != null && vehiclesDTO.getVehicle() != null && vehiclesDTO.getVehicle().size() > 0) {
             vehiclesDTO.getVehicle().forEach(vehicleDTO -> {
                 if (vehicleDTO.getVehicleDetails() != null) {
-                    Vehicle vehicle=new Vehicle();
+                    Vehicle vehicle = new Vehicle();
                     //Vehicle vehicle=modelMapper.map(vehicleDTO.getVehicleDetails(), Vehicle.class);
                     vehicle.setVehicleId(vehicleDTO.getVehicleId());
 
@@ -123,7 +107,7 @@ public class VehicleService {
     }
 
     private Set<VehiclePrice> buildVehiclePrice(List<VehiclePriceDTO> vehiclePriceDTOS) {
-        Set<VehiclePrice> vehiclePrices=new HashSet<>();
+        Set<VehiclePrice> vehiclePrices = new HashSet<>();
         if (vehiclePriceDTOS != null && vehiclePriceDTOS.size() > 0) {
             vehiclePriceDTOS.forEach(vehiclePriceDTO -> vehiclePrices.add(
                     VehiclePrice.builder()
@@ -138,14 +122,14 @@ public class VehicleService {
 
     private Double convertVehiclePriceStringToDouble(String value) {
         Double finalValue;
-        value=value.replace("$", "");
-        value=value.replace(",", "");
-        finalValue=Double.valueOf(value);
+        value = value.replace("$", "");
+        value = value.replace(",", "");
+        finalValue = Double.valueOf(value);
         return finalValue;
     }
 
     private List<VehiclePriceDTO> buildVehiclePriceDTO(Set<VehiclePrice> vehiclePriceS) {
-        List<VehiclePriceDTO> vehiclePriceDTOS=new ArrayList<>();
+        List<VehiclePriceDTO> vehiclePriceDTOS = new ArrayList<>();
         if (vehiclePriceS != null && vehiclePriceS.size() > 0) {
             vehiclePriceS.forEach(vehiclePrice -> vehiclePriceDTOS.add(
                     VehiclePriceDTO.builder()
@@ -160,7 +144,7 @@ public class VehicleService {
 
     // this is while saving to DB for mapping DTO to entity
     private Set<VehicleFeature> buildVehicleFeatures(VehicleFeatureDTO vehicleFeature) {
-        Set<VehicleFeature> vehicleFeatures=new HashSet<>();
+        Set<VehicleFeature> vehicleFeatures = new HashSet<>();
         if (vehicleFeature != null && vehicleFeature.getExterior() != null && vehicleFeature.getExterior().size() > 0) {
             vehicleFeature.getExterior().forEach(feature -> vehicleFeatures.add(VehicleFeature.builder().featureType(FeatureType.EXTERIOR).feature(feature).build()));
         }
@@ -172,9 +156,9 @@ public class VehicleService {
 
     // this is while retrieving data from DB for mapping entity to DTO
     private VehicleFeatureDTO buildVehicleFeatureDTO(Set<VehicleFeature> vehicleFeatures) {
-        VehicleFeatureDTO vehicleFeatureDTO=new VehicleFeatureDTO();
-        List<String> exteriorArray=new ArrayList<>();
-        List<String> interiorArray=new ArrayList<>();
+        VehicleFeatureDTO vehicleFeatureDTO = new VehicleFeatureDTO();
+        List<String> exteriorArray = new ArrayList<>();
+        List<String> interiorArray = new ArrayList<>();
         if (vehicleFeatures != null && vehicleFeatures.size() > 0) {
             for (VehicleFeature vehicleFeature : vehicleFeatures) {
                 if (vehicleFeature.getFeatureType().equals(FeatureType.EXTERIOR)) {

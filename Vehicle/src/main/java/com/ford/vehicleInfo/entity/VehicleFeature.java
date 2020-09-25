@@ -19,7 +19,4 @@ public class VehicleFeature {
     private Long featureId;
     private FeatureType featureType;
     private String feature;
-    @ManyToOne
-    private Vehicle vehicle;
-
 }

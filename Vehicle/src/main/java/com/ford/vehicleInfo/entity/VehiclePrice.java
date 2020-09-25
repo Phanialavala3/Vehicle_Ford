@@ -19,8 +19,6 @@ public class VehiclePrice {
     private Double mSRP;
     private Double savings;
     private Double finalPrice;
-    @ManyToOne
-    private Vehicle vehicle;
 
     public String getMSRP() {
         return "$" + mSRP;
